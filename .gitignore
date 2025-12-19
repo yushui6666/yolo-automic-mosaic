@@ -1,0 +1,16 @@
+## 忽略 Python 编译文件
+__pycache__/
+*.py[cod]
+
+# 忽略模型文件（通常很大）
+*.pth
+*.pt
+*.h5
+*.weights
+
+# 忽略视频文件（通常很大）
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.jpg
