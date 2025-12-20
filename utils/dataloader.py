@@ -1,3 +1,11 @@
+#-----------------------------------------------------------------------#
+#   dataloader.py：YOLO 数据集加载和数据增强
+#   功能概述：
+#   1. YoloDataset：自定义数据集类，用于加载训练和验证数据
+#   2. 支持多种数据增强：Mosaic、MixUp、随机翻转、颜色变换等
+#   3. 标签格式转换：将标注框转换为模型训练所需的格式
+#   4. yolo_dataset_collate：DataLoader 的批处理函数
+#-----------------------------------------------------------------------#
 from random import sample, shuffle
 
 import cv2
@@ -8,8 +16,23 @@ from torch.utils.data.dataset import Dataset
 
 from utils.utils import cvtColor, preprocess_input
 
-#该文件的功能是定义了一个数据集类，用于加载和处理YOLOv8模型的训练和验证数据。
 class YoloDataset(Dataset):
+    """
+    YOLO 数据集类
+    
+    主要功能：
+    1. 加载图像和标注数据
+    2. 应用数据增强（Mosaic、MixUp、随机翻转、颜色变换等）
+    3. 将标注框转换为模型训练所需的格式
+    4. 支持训练和验证两种模式
+    
+    数据增强策略：
+    - Mosaic：将 4 张图像拼接成一张，增加小目标检测能力
+    - MixUp：将两张图像混合，增加数据多样性
+    - 随机翻转：水平翻转图像和标注框
+    - 颜色变换：HSV 空间的色相、饱和度、明度随机调整
+    - 随机缩放和裁剪：增加模型对不同尺度的鲁棒性
+    """
     def __init__(self, annotation_lines, input_shape, num_classes, epoch_length, \
                         mosaic, mixup, mosaic_prob, mixup_prob, train, special_aug_ratio = 0.7):
         super(YoloDataset, self).__init__()

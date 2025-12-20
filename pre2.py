@@ -226,8 +226,8 @@ if __name__ == "__main__":
     mode = "video" # 当前模式：处理视频文件
 
     # 输入视频路径和输出保存路径
-    video_path = 'vedio/2.mp4'
-    video_save_path = "vedio/2_out.mp4"
+    video_path = 'vedio/man.mp4'
+    video_save_path = "vedio/man_out.mp4"
     video_fps = 60  # 保存视频时的帧率
 
     if mode == "video":

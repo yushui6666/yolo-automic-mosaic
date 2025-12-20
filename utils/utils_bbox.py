@@ -1,8 +1,16 @@
+#-----------------------------------------------------------------------#
+#   utils_bbox.py：边界框解码和非极大值抑制（NMS）
+#   功能概述：
+#   1. DecodeBox：将模型输出的特征图解码为边界框坐标
+#   2. 生成锚点（anchor points）和步长（strides）
+#   3. 距离到边界框的转换（dist2bbox）
+#   4. 非极大值抑制（NMS）：去除重叠的检测框
+#   5. 坐标格式转换：支持 xyxy 和 xywh 格式
+#-----------------------------------------------------------------------#
 import numpy as np
 import torch
 from torchvision.ops import nms
 import pkg_resources as pkg
-#该文件的作用是用于计算mAP。map是用来评估目标检测算法的性能的指标。
 def check_version(current: str = "0.0.0",
                   minimum: str = "0.0.0",
                   name: str = "version ",

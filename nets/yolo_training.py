@@ -1,3 +1,12 @@
+#-----------------------------------------------------------------------#
+#   yolo_training.py：YOLO 训练相关的损失函数和工具
+#   功能概述：
+#   1. TaskAlignedAssigner：任务对齐分配器（正负样本分配）
+#   2. BboxLoss：边界框损失（IoU 损失 + DFL 损失）
+#   3. Loss：总损失函数（分类损失 + 回归损失）
+#   4. ModelEMA：指数移动平均模型（稳定训练）
+#   5. 学习率调度器、权重初始化等工具函数
+#-----------------------------------------------------------------------#
 import math
 from copy import deepcopy
 from functools import partial
@@ -73,16 +82,35 @@ def select_highest_overlaps(mask_pos, overlaps, n_max_boxes):
 
 
 class TaskAlignedAssigner(nn.Module):
-
+    """
+    任务对齐分配器（Task-Aligned Assigner）
+    
+    用于将真实框（ground truth）分配给合适的锚点（anchor points）
+    
+    分配策略:
+        1. 计算对齐度量（align_metric）：类别得分^alpha * IoU^beta
+        2. 选择在真实框内的锚点
+        3. 选择每个真实框的 top-k 个最佳锚点
+        4. 如果锚点被分配给多个真实框，选择 IoU 最高的
+    
+    参数:
+        topk: int, 每个真实框分配的锚点数量，默认 13
+        num_classes: int, 类别数量，默认 80
+        alpha: float, 类别得分的权重指数，默认 1.0
+        beta: float, IoU 的权重指数，默认 6.0
+        eps: float, 防止除零的小值，默认 1e-9
+        roll_out_thr: int, 是否使用展开循环的阈值，默认 0
+                      - 当真实框数量 > roll_out_thr 时，使用展开循环（节省内存）
+    """
     def __init__(self, topk=13, num_classes=80, alpha=1.0, beta=6.0, eps=1e-9, roll_out_thr=0):
         super().__init__()
-        self.topk           = topk
-        self.num_classes    = num_classes
-        self.bg_idx         = num_classes
-        self.alpha          = alpha
-        self.beta           = beta
-        self.eps            = eps
-        # roll_out_thr为64
+        self.topk           = topk           # 每个真实框分配的锚点数量
+        self.num_classes    = num_classes     # 类别数量
+        self.bg_idx         = num_classes     # 背景类索引
+        self.alpha          = alpha           # 类别得分权重
+        self.beta           = beta            # IoU 权重
+        self.eps            = eps             # 防止除零
+        # roll_out_thr 为 64：当真实框数量 > 64 时使用展开循环
         self.roll_out_thr   = roll_out_thr
 
     @torch.no_grad()
@@ -309,10 +337,21 @@ def bbox2dist(anchor_points, bbox, reg_max):
     return torch.cat((anchor_points - x1y1, x2y2 - anchor_points), -1).clamp(0, reg_max - 0.01)  # dist (lt, rb)
 
 class BboxLoss(nn.Module):
+    """
+    边界框损失函数
+    
+    包含两种损失：
+    1. IoU 损失：衡量预测框和真实框的重叠程度（使用 CIoU）
+    2. DFL 损失：分布焦点损失，用于边界框回归的分布预测
+    
+    参数:
+        reg_max: int, DFL 的分布通道数，默认 16
+        use_dfl: bool, 是否使用 DFL 损失，默认 False
+    """
     def __init__(self, reg_max=16, use_dfl=False):
         super().__init__()
-        self.reg_max = reg_max
-        self.use_dfl = use_dfl
+        self.reg_max = reg_max  # DFL 分布通道数
+        self.use_dfl = use_dfl  # 是否使用 DFL
 
     def forward(self, pred_dist, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask):
         # 计算IOU损失
@@ -366,22 +405,43 @@ def xywh2xyxy(x):
 
 # Criterion class for computing training losses
 class Loss:
+    """
+    YOLO 总损失函数
+    
+    包含三部分损失：
+    1. 边界框损失（IoU + DFL）：衡量预测框和真实框的差异
+    2. 分类损失（BCE）：衡量类别预测的准确性
+    
+    参数:
+        model: nn.Module, YOLO 模型对象（用于获取配置参数）
+    """
     def __init__(self, model): 
+        # 二元交叉熵损失（用于分类）
         self.bce    = nn.BCEWithLogitsLoss(reduction='none')
-        self.stride = model.stride  # model strides
-        self.nc     = model.num_classes  # number of classes
-        self.no     = model.no
-        self.reg_max = model.reg_max
         
+        # 从模型获取配置参数
+        self.stride = model.stride      # 模型步长
+        self.nc     = model.num_classes # 类别数量
+        self.no     = model.no          # 每个锚点的输出通道数
+        self.reg_max = model.reg_max    # DFL 分布通道数
+        
+        # 是否使用 DFL
         self.use_dfl = model.reg_max > 1
-        roll_out_thr = 64
+        roll_out_thr = 64  # 展开循环阈值
 
-        self.assigner = TaskAlignedAssigner(topk=10,
-                                            num_classes=self.nc,
-                                            alpha=0.5,
-                                            beta=6.0,
-                                            roll_out_thr=roll_out_thr)
+        # 任务对齐分配器（用于正负样本分配）
+        self.assigner = TaskAlignedAssigner(
+            topk=10,                    # 每个真实框分配 10 个锚点
+            num_classes=self.nc,
+            alpha=0.5,                  # 类别得分权重
+            beta=6.0,                   # IoU 权重
+            roll_out_thr=roll_out_thr
+        )
+        
+        # 边界框损失函数
         self.bbox_loss  = BboxLoss(model.reg_max - 1, use_dfl=self.use_dfl)
+        
+        # DFL 投影向量（用于解码）
         self.proj       = torch.arange(model.reg_max, dtype=torch.float)
 
     def preprocess(self, targets, batch_size, scale_tensor):
@@ -497,18 +557,45 @@ def copy_attr(a, b, include=(), exclude=()):
             setattr(a, k, v)
 
 class ModelEMA:
-    """ Updated Exponential Moving Average (EMA) from https://github.com/rwightman/pytorch-image-models
-    Keeps a moving average of everything in the model state_dict (parameters and buffers)
-    For EMA details see https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage
     """
-
+    指数移动平均模型（Exponential Moving Average）
+    
+    维护模型参数的移动平均，用于稳定训练和提升模型性能
+    
+    原理:
+        EMA 模型 = decay * EMA_old + (1 - decay) * current_model
+        - 在训练过程中，EMA 模型会平滑地跟随当前模型
+        - EMA 模型通常比当前模型更稳定，性能更好
+    
+    参考:
+        https://github.com/rwightman/pytorch-image-models
+        https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage
+    
+    参数:
+        model: nn.Module, 原始模型
+        decay: float, 衰减率，默认 0.9999（越大越平滑）
+        tau: int, 衰减时间常数，默认 2000
+        updates: int, 更新次数，默认 0
+    
+    注意:
+        - EMA 模型只用于推理，不参与训练
+        - 使用动态衰减率，早期 epoch 衰减更快
+    """
     def __init__(self, model, decay=0.9999, tau=2000, updates=0):
-        # Create EMA
+        # 创建 EMA 模型（深拷贝，设置为评估模式）
         self.ema = deepcopy(de_parallel(model)).eval()  # FP32 EMA
+        
+        # 可选：使用 FP16 EMA（节省内存，但可能影响精度）
         # if next(model.parameters()).device.type != 'cpu':
         #     self.ema.half()  # FP16 EMA
-        self.updates = updates  # number of EMA updates
-        self.decay = lambda x: decay * (1 - math.exp(-x / tau))  # decay exponential ramp (to help early epochs)
+        
+        self.updates = updates  # EMA 更新次数
+        
+        # 动态衰减率：早期衰减更快，后期更平滑
+        # decay(x) = decay * (1 - exp(-x / tau))
+        self.decay = lambda x: decay * (1 - math.exp(-x / tau))
+        
+        # EMA 模型的参数不需要梯度
         for p in self.ema.parameters():
             p.requires_grad_(False)
 

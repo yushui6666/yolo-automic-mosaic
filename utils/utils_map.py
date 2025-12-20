@@ -1,3 +1,12 @@
+#-----------------------------------------------------------------------#
+#   utils_map.py：mAP（mean Average Precision）计算和评估
+#   功能概述：
+#   1. 计算 VOC 格式的 mAP（Pascal VOC 评估标准）
+#   2. 计算 COCO 格式的 mAP（COCO 评估标准，包含多个 IoU 阈值）
+#   3. 绘制评估曲线：AP、Precision、Recall、F1 曲线
+#   4. 生成评估报告和可视化结果
+#   5. 支持 TP/FP/FN 统计和可视化
+#-----------------------------------------------------------------------#
 import glob
 import json
 import math
