@@ -1,0 +1,19 @@
+
+    {
+  "background.fullscreen": {
+    
+    "images": [
+      "E:/steam/steamapps/workshop/content/431960/2993708204/preview.jpg"
+      
+    ],
+    "opacity": 0.2,
+    "size": "cover",
+    "position": "center",
+    "interval": 0,
+    "random": false
+  },
+  
+  "background.sidebar": {},
+  "background.panel": {}
+
+}

@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人脸库和视频处理</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .upload-section.photo-section {
+            border-color: #3498db;
+        }
+        .upload-section.video-section {
+            border-color: #2ecc71;
+        }
+        .upload-section h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .photo-section h2 {
+            color: #3498db;
+        }
+        .video-section h2 {
+            color: #2ecc71;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        .file-input {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .text-input {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        .options-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .options-section h3 {
+            color: #2980b9;
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        .options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .options label {
+            display: flex;
+            align-items: center;
+            font-weight: bold;
+        }
+        .options input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        .btn {
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            display: inline-block;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .btn:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .btn-blue {
+            background-color: #3498db;
+        }
+        .btn-green {
+            background-color: #2ecc71;
+        }
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .file-name {
+            margin: 10px 0;
+            padding: 8px;
+            background-color: #e8f4f8;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .download-section {
+            margin-top: 20px;
+            padding: 15px;
+            border: 2px solid #2ecc71;
+            border-radius: 5px;
+            background-color: #f0fff4;
+            display: none;
+        }
+        .download-section h3 {
+            color: #2ecc71;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        .hint {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>人脸库和视频处理系统</h1>
+        
+        <!-- 照片上传区域 -->
+        <div class="upload-section photo-section">
+            <h2>📸 上传照片到人脸库</h2>
+            <div class="form-group">
+                <label for="photoUpload">选择照片：</label>
+                <input type="file" id="photoUpload" class="file-input" accept="image/*" onchange="handlePhotoSelect()">
+                <div id="photoFileName" class="file-name"></div>
+            </div>
+            <div class="form-group">
+                <label for="photoName">自定义名称（可选）：</label>
+                <input type="text" id="photoName" class="text-input" placeholder="例如：张三、person1 等">
+                <div class="hint">留空则使用原文件名</div>
+            </div>
+            <button class="btn btn-blue" id="uploadPhotoBtn" onclick="uploadPhoto()" disabled>上传照片</button>
+            <div id="photoStatus" class="status"></div>
+            <div id="photoLoading" class="loading">
+                <div class="loading-spinner"></div>
+                <p>正在上传照片...</p>
+            </div>
+        </div>
+        
+        <!-- 视频上传区域 -->
+        <div class="upload-section video-section">
+            <h2>🎬 上传视频进行处理</h2>
+            <div class="form-group">
+                <label for="videoUpload">选择视频：</label>
+                <input type="file" id="videoUpload" class="file-input" accept="video/*" onchange="handleVideoSelect()">
+                <div id="videoFileName" class="file-name"></div>
+            </div>
+            
+            <div class="options-section">
+                <h3>处理选项</h3>
+                <div class="options">
+                    <label>
+                        <input type="checkbox" id="applyMosaic">
+                        应用马赛克
+                    </label>
+                    <label>
+                        <input type="checkbox" id="faceDetection">
+                        启用人脸识别
+                    </label>
+                </div>
+            </div>
+            
+            <button class="btn btn-green" id="uploadVideoBtn" onclick="uploadVideo()" disabled>上传并处理视频</button>
+            <div id="videoStatus" class="status"></div>
+            <div id="videoLoading" class="loading">
+                <div class="loading-spinner"></div>
+                <p>正在处理视频，请稍候...</p>
+            </div>
+            
+            <div id="downloadSection" class="download-section">
+                <h3>✓ 处理完成</h3>
+                <a id="downloadLink" class="btn btn-green" download>下载处理后的视频</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showStatus(elementId, message, type) {
+            const statusDiv = document.getElementById(elementId);
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function handlePhotoSelect() {
+            const fileInput = document.getElementById('photoUpload');
+            const file = fileInput.files[0];
+            const fileNameDiv = document.getElementById('photoFileName');
+            const uploadBtn = document.getElementById('uploadPhotoBtn');
+            
+            if (file) {
+                fileNameDiv.textContent = '已选择: ' + file.name;
+                uploadBtn.disabled = false;
+            } else {
+                fileNameDiv.textContent = '';
+                uploadBtn.disabled = true;
+            }
+        }
+
+        function handleVideoSelect() {
+            const fileInput = document.getElementById('videoUpload');
+            const file = fileInput.files[0];
+            const fileNameDiv = document.getElementById('videoFileName');
+            const uploadBtn = document.getElementById('uploadVideoBtn');
+            
+            if (file) {
+                fileNameDiv.textContent = '已选择: ' + file.name;
+                uploadBtn.disabled = false;
+            } else {
+                fileNameDiv.textContent = '';
+                uploadBtn.disabled = true;
+            }
+        }
+
+        async function uploadPhoto() {
+            const fileInput = document.getElementById('photoUpload');
+            const file = fileInput.files[0];
+            const nameInput = document.getElementById('photoName');
+            
+            if (!file) {
+                showStatus('photoStatus', '请选择一个照片文件。', 'error');
+                return;
+            }
+            
+            // 显示加载指示器
+            document.getElementById('photoLoading').style.display = 'block';
+            document.getElementById('photoStatus').style.display = 'none';
+            
+            // 创建FormData对象
+            const formData = new FormData();
+            formData.append('file', file);
+            if (nameInput.value.trim()) {
+                formData.append('name', nameInput.value.trim());
+            }
+            
+            try {
+                // 发送请求到服务器
+                const response = await fetch('/upload_photo', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                // 隐藏加载指示器
+                document.getElementById('photoLoading').style.display = 'none';
+                
+                if (result.success) {
+                    showStatus('photoStatus', result.message, 'success');
+                    // 清空输入
+                    nameInput.value = '';
+                    fileInput.value = '';
+                    document.getElementById('photoFileName').textContent = '';
+                    document.getElementById('uploadPhotoBtn').disabled = true;
+                } else {
+                    showStatus('photoStatus', result.error, 'error');
+                }
+            } catch (error) {
+                // 隐藏加载指示器
+                document.getElementById('photoLoading').style.display = 'none';
+                showStatus('photoStatus', '上传失败: ' + error.message, 'error');
+            }
+        }
+
+        async function uploadVideo() {
+            const fileInput = document.getElementById('videoUpload');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showStatus('videoStatus', '请选择一个视频文件。', 'error');
+                return;
+            }
+            
+            const applyMosaic = document.getElementById('applyMosaic').checked;
+            const enableFaceDetection = document.getElementById('faceDetection').checked;
+            
+            // 显示加载指示器
+            document.getElementById('videoLoading').style.display = 'block';
+            document.getElementById('videoStatus').style.display = 'none';
+            document.getElementById('downloadSection').style.display = 'none';
+            
+            // 创建FormData对象
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('applyMosaic', applyMosaic);
+            formData.append('faceDetection', enableFaceDetection);
+            
+            try {
+                // 发送请求到服务器
+                const response = await fetch('/upload_video', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                // 隐藏加载指示器
+                document.getElementById('videoLoading').style.display = 'none';
+                
+                if (result.success) {
+                    showStatus('videoStatus', result.message, 'success');
+                    
+                    // 显示下载区域
+                    const downloadSection = document.getElementById('downloadSection');
+                    const downloadLink = document.getElementById('downloadLink');
+                    
+                    downloadLink.href = result.download_url;
+                    downloadSection.style.display = 'block';
+                } else {
+                    showStatus('videoStatus', result.error, 'error');
+                }
+            } catch (error) {
+                // 隐藏加载指示器
+                document.getElementById('videoLoading').style.display = 'none';
+                showStatus('videoStatus', '上传失败: ' + error.message, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

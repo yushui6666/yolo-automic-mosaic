@@ -9,6 +9,7 @@
 #-----------------------------------------------------------------------#
 import os
 import time
+import argparse
 
 # 设置 ONNX Runtime 的日志级别，减少不必要的控制台输出
 os.environ["ORT_LOG_SEVERITY_LEVEL"] = "3"  # 0-4: VERBOSE, INFO, WARNING, ERROR, FATAL
@@ -20,8 +21,9 @@ from PIL import Image
 from collections import defaultdict
 
 # 导入自定义工具类
-from utils.face_pi import FaceKpsAlignRec  # 负责人脸关键点定位、对齐、特征提取
-from yolo2 import YOLO, mosaic_area        # 负责 YOLO 检测和马赛克绘制
+from yolo2 import YOLO                   # 负责 YOLO 检测
+from utils.image_processor import ImageProcessor # 图像处理类，包含马赛克等功能
+from utils.face_gallery import FaceGallery    # 人脸库管理类
 
 
 def iou_xyxy(a, b):
@@ -220,6 +222,17 @@ def build_gallery(face_id, yolo, gallery_dir="gallery"):
 # ------------------------------- 主程序入口 -------------------------------
 
 if __name__ == "__main__":
+    # 创建一个布尔变量，用于控制是否对未知人脸进行马赛克处理
+    # 默认值为 False，表示不进行马赛克处理
+    # 如果您想开启马赛克效果，请将其设置为 True
+    enable_mosaic = False  # <--- 在这里修改 True 或 False 来开启/关闭马赛克
+
+    # 如果您想从命令行行控制，可以取消下面代码的注释
+    # parser = argparse.ArgumentParser(description="Video face detection and mosaic application.")
+    # parser.add_argument("--enable-mosaic", action="store_true", help="Enable mosaic for unknown faces.")
+    # args = parser.parse_args()
+    # enable_mosaic = args.enable_mosaic
+
     # 初始化 YOLO 检测器
     yolo = YOLO()
 
@@ -249,17 +262,13 @@ if __name__ == "__main__":
         # 初始化跟踪器
         tracker = SimpleTracker(iou_th=0.3, max_miss=2, ema_alpha=0.6)
 
-        # 初始化人脸特征提取模型 (需确保 rec_onnx_path 路径下的模型文件存在)
+        # 初始化人脸底库模块
+        # rec_onnx_path 是 ArcFace 模型的路径，需要确保模型文件存在
         # 注意：这里的路径是绝对路径，换电脑运行需要修改！
-        face_id = FaceKpsAlignRec(
-            det_size=(640, 640),
-            ctx_id=0,  # GPU索引，0表示第一块显卡；若无 GPU 需检查 ONNXRuntime 是否为 CPU 版
-            providers=("CUDAExecutionProvider", "CPUExecutionProvider"),
-            rec_onnx_path=r"C:\Users\34239\.insightface\models\buffalo_l\w600k_r50.onnx",
-        )
-
+        rec_onnx_path = r"C:\Users\34239\.insightface\models\buffalo_l\w600k_r50.onnx"
+        face_gallery = FaceGallery(yolo, rec_onnx_path)
         # 构建底库：读取 ./gallery 文件夹
-        gallery = build_gallery(face_id, yolo, gallery_dir="gallery")
+        gallery = face_gallery.build_gallery(gallery_dir="gallery")
 
         fps = 0.0
         frame_idx = 0
@@ -316,17 +325,20 @@ if __name__ == "__main__":
                 # 默认用上一帧的结果
                 name_text = track_names.get(tid, "...")
 
-                if need_rec:
+                # 人脸识别开关
+                enable_recognition = True  # 设为 False 则禁用人脸识别，全部打码
+
+                if need_rec and enable_recognition:
                     # --- 4) 人脸识别流程 ---
-                    kps5 = face_id.kps5_from_bbox(frame_bgr, bb, margin=0.35)
-                    aligned = face_id.align_112(frame_bgr, kps5) if kps5 is not None else None
+                    kps5 = face_gallery.face_id.kps5_from_bbox(frame_bgr, bb, margin=0.35)
+                    aligned = face_gallery.face_id.align_112(frame_bgr, kps5) if kps5 is not None else None
 
                     # 本帧的候选识别结果
                     if aligned is not None:
-                        emb = face_id.embedding_from_aligned(aligned)
+                        emb = face_gallery.face_id.embedding_from_aligned(aligned)
                         track_embs[tid] = emb
-                        name, sim = recognize_from_gallery(
-                            emb, gallery, sim_th=0.3  # 相似度阈值
+                        name, sim = face_gallery.recognize(
+                            emb, sim_th=0.3  # 相似度阈值
                         )
                         candidate_text = f"{name}({sim:.2f})"
                     else:
@@ -368,6 +380,13 @@ if __name__ == "__main__":
                         track_unknown_cnt[tid] = unknown_cnt
 
                     track_names[tid] = name_text
+                elif need_rec and not enable_recognition:
+                    # 禁用人脸识别，所有目标都标记为 unknown
+                    name_text = "unknown"
+                    track_names[tid] = name_text
+                    # 初始化计数器
+                    track_stable_cnt[tid] = 0
+                    track_unknown_cnt[tid] = unknown_warmup  # 直接达到打码阈值
 
                 # 在框上方绘制 ID 和 识别结果
                 cv2.putText(
@@ -381,9 +400,9 @@ if __name__ == "__main__":
                 )
 
                 # --- 5) 隐私打码逻辑 ---
-                # 只有当识别结果是 unknown 且连续 unknown 帧数 >= unknown_warmup 才打码
+                # 只有当识别结果是 unknown 且连续 unknown 帧数 >= unknown_warmup 且全局变量 enable_mosaic 为 True 时才打码
                 unk_cnt = track_unknown_cnt.get(tid, 0)
-                if name_text.startswith("unknown") and unk_cnt >= unknown_warmup:
+                if enable_mosaic and name_text.startswith("unknown") and unk_cnt >= unknown_warmup:
                     expand_ratio = 0.18
                     cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
                     nw, nh = int(bw * (1 + expand_ratio)), int(bh * (1 + expand_ratio))
@@ -393,7 +412,8 @@ if __name__ == "__main__":
                     ex2 = min(w, cx + nw // 2)
                     ey2 = min(h, cy + nh // 2)
 
-                    frame_bgr = mosaic_area(
+                    image_processor = ImageProcessor()
+                    frame_bgr = image_processor.apply_mosaic(
                         frame_bgr,
                         ex1,
                         ey1,

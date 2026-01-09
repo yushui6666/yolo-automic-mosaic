@@ -47,23 +47,6 @@ class FaceKpsAlignRec:
                  ctx_id=0,
                  providers=("CUDAExecutionProvider", "CPUExecutionProvider"),
                  rec_onnx_path=None):
-        """
-        初始化人脸关键点检测和特征提取模型
-        
-        参数:
-            det_size: tuple, InsightFace 检测器的输入图像尺寸，默认 (640, 640)
-                     较大的尺寸可以提高检测精度，但会增加计算量
-            ctx_id: int, GPU 设备索引，0 表示第一块 GPU，-1 表示使用 CPU
-            providers: tuple, ONNX Runtime 的执行提供者列表
-                       - CUDAExecutionProvider: 使用 GPU 加速
-                       - CPUExecutionProvider: 使用 CPU 执行（备用）
-            rec_onnx_path: str, ArcFace 特征提取模型的 ONNX 文件路径
-                          例如：r"C:\Users\xxx\.insightface\models\buffalo_l\w600k_r50.onnx"
-        
-        注意:
-            - 需要先安装 insightface 库：pip install insightface
-            - 需要下载对应的模型文件
-        """
         from insightface.app import FaceAnalysis
         from insightface.model_zoo import get_model
 
@@ -79,9 +62,9 @@ class FaceKpsAlignRec:
         # B) 初始化人脸识别模型：ArcFace 特征提取模型
         # 该模型用于将对齐后的人脸图像转换为特征向量
         if rec_onnx_path is None:
-            raise ValueError("rec_onnx_path 不能为空，例如 ...\\.insightface\\models\\buffalo_l\\w600k_r50.onnx")
+            raise ValueError("rec_onnx_path 不能为空，例如 .../.insightface/models/buffalo_l/w600k_r50.onnx")
 
-        # 加载 ONNX 模型
+        # 加载 ONNX 模型，使用原始字符串避免转义问题
         self.rec_model = get_model(rec_onnx_path, providers=list(providers))
         # 准备识别模型
         self.rec_model.prepare(ctx_id=ctx_id)
