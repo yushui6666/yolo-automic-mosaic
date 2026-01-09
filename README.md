@@ -1,302 +1,311 @@
-# YOLO人脸检测与识别系统
+# YOLO 人脸检测与识别系统
 
-基于YOLO目标检测和InsightFace人脸识别的智能视频/图像处理系统，支持人脸检测、识别和马赛克脱敏处理。
+一个基于 YOLO 和 InsightFace 的人脸检测、识别和隐私保护系统。支持视频流实时处理、人脸底库管理和自动马赛克脱敏。
 
-## 主要功能
+## ✨ 主要功能
 
-- **人脸检测**：使用YOLOv8模型实时检测图片和视频中的人脸
-- **人脸识别**：基于InsightFace的高精度人脸识别，支持自定义人脸底库
-- **马赛克脱敏**：可选择对识别的人脸区域应用马赛克保护隐私
-- **智能跟踪**：简化版人脸跟踪算法，提高视频处理效率
-- **Web界面**：简洁易用的Flask Web界面，支持文件上传和在线处理
-- **多格式支持**：支持图片（JPG, JPEG, PNG, GIF）和视频（MP4, AVI, MOV）
+- 🎯 **YOLO 人脸检测**：基于 YOLO 网络的高精度人脸检测
+- 🧠 **人脸识别**：使用 InsightFace/ArcFace 进行人脸特征提取和识别
+- 👥 **人脸底库**：支持构建和管理人脸特征库
+- 🎭 **马赛克脱敏**：对未知人脸自动打码，保护隐私
+- 🎥 **视频处理**：支持实时视频流和视频文件处理
+- 🌐 **Web 应用**：提供 Flask Web 界面，支持照片和视频上传
+- 📊 **目标跟踪**：基于 IoU 的轻量级跟踪算法
 
-## 项目结构
+## 📁 项目结构
 
 ```
 project/
-├── src/                        # Flask应用源代码
-│   ├── app.py                 # Flask主应用（Web服务器）
-│   ├── pre2.py                # 原始视频处理脚本
-│   ├── yolo2.py               # YOLO检测器封装类
-│   └── templates/
-│       └── index.html         # Web前端界面
-├── nets/                       # 神经网络模块
-│   ├── yolo.py                # YOLO主体网络结构
-│   ├── yolo_training.py       # YOLO训练相关代码
-│   ├── backbone.py            # Backbone主干网络
-│   └── nets_explanation.md    # 网络结构说明文档
-├── utils/                      # 工具模块
-│   ├── face_gallery.py        # 人脸识别与底库管理
-│   ├── image_processor.py     # 图像处理工具
-│   ├── face_pi.py             # 人脸检测辅助工具
-│   ├── utils_bbox.py          # 边界框工具
-│   ├── utils_map.py           # MAP评估工具
-│   ├── utils_fit.py           # 训练拟合工具
-│   ├── callbacks.py           # 训练回调函数
-│   └── dataloader.py          # 数据加载器
-├── model/                      # 模型文件目录
-│   ├── best_epoch_weights.pth # YOLO训练权重
-│   └── voc_classes.txt        # 类别定义文件
-├── gallery/                    # 人脸底库目录
-├── video/                      # 处理后的视频存储目录
-├── uploads/                    # 临时上传文件目录
-├── requirements.txt           # Python依赖列表
-├── index.html                  # 前端页面（备用）
-└── README.md                   # 项目说明文档
+├── nets/                   # 神经网络定义
+│   ├── backbone.py        # 主干网络
+│   └── yolo.py           # YOLO 网络结构
+├── utils/                 # 工具模块
+│   ├── face_gallery.py    # 人脸底库管理
+│   ├── face_pi.py         # 人脸关键点、对齐、特征提取
+│   ├── image_processor.py # 图像处理（马赛克）
+│   ├── utils.py          # 通用工具函数
+│   └── utils_bbox.py     # 边界框解码和 NMS
+├── src/                  # 源代码
+│   ├── app.py            # Flask Web 应用
+│   ├── pre2.py           # 视频处理脚本
+│   └── yolo2.py          # YOLO 检测器封装
+├── model/                # 模型文件
+│   └── voc_classes.txt   # 类别名称
+├── gallery/              # 人脸底库照片目录
+├── vedio/               # 视频文件目录
+├── uploads/             # 上传文件临时目录
+└── requirements.txt      # Python 依赖
 ```
 
-## 环境要求
+## 🚀 快速开始
 
-- Python 3.8+
-- CUDA 11.0+（可选，用于GPU加速）
-- 至少4GB可用内存（视频处理建议8GB以上）
-- 2GB可用磁盘空间（用于模型文件）
+### 环境要求
 
-## 安装步骤
+- Python 3.7+
+- CUDA 11.0+（可选，用于 GPU 加速）
+- PyTorch 1.10+
 
-### 1. 克隆项目
-
-```bash
-git clone https://github.com/yushui6666/yolo-automic-mosaic.git
-cd yolo-automic-mosaic
-```
-
-### 2. 创建虚拟环境（推荐）
-
-**Windows:**
-```bash
-python -m venv venv
-venv\Scripts\activate
-```
-
-**Linux/Mac:**
-```bash
-python -m venv venv
-source venv/bin/activate
-```
-
-### 3. 安装依赖
+### 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-依赖包列表：
-- flask==2.3.0 - Web框架
-- werkzeug==2.3.0 - WSGI工具库
-- opencv-python==4.7.0.72 - 图像/视频处理
-- numpy==1.24.3 - 数值计算
-- torch>=2.0.0 - 深度学习框架
-- pillow>=9.0.0 - 图像处理
-- onnxruntime>=1.15.0 - ONNX推理引擎
+### 模型准备
 
-### 4. 安装InsightFace模型
+1. **下载 YOLO 模型权重**
+   - 将训练好的 `best_epoch_weights.pth` 放入 `model/` 目录
+   - 确保 `model/voc_classes.txt` 包含正确的类别名称
 
-```bash
-pip install insightface
-python -c "import insightface; insightface.app.download_model('buffalo_l')"
-```
+2. **下载 InsightFace 模型**
+   ```bash
+   # 首次运行会自动下载到 ~/.insightface/models/
+   # 或手动下载 w600k_r50.onnx 到该目录
+   ```
 
-模型将自动下载到 `~/.insightface/models/buffalo_l/` 目录
+3. **准备人脸底库**
+   - 将人脸照片放入 `gallery/` 目录
+   - 文件命名格式：`姓名_序号.jpg`（如：`zhangsan_1.jpg`、`zhangsan_2.jpg`）
 
-### 5. 确认模型文件
+## 💡 使用方法
 
-确保以下文件存在：
-- `model/best_epoch_weights.pth` - YOLO模型权重
-- `model/voc_classes.txt` - 类别定义
-- `~/.insightface/models/buffalo_l/w600k_r50.onnx` - 人脸识别模型
+### 1. Web 应用
 
-## 使用说明
-
-### 启动Web服务
+启动 Flask Web 服务：
 
 ```bash
-cd src
-python app.py
+python src/app.py
 ```
 
-服务将在 `http://localhost:5000` 启动
+访问 `http://localhost:5000` 使用 Web 界面。
 
-### Web界面操作
+**功能：**
+- 上传照片到人脸底库
+- 上传视频进行处理
+- 配置是否应用马赛克和人脸识别
 
-#### 1. 上传照片到人脸底库
-- 点击"上传照片"按钮
-- 选择要添加的照片
-- 可选：输入自定义名称（例如："张三"）
-- 照片将保存到 `gallery/` 目录，用于后续识别
+### 2. 视频处理脚本
 
-#### 2. 处理视频
-- 点击"选择视频"按钮
-- 选择要处理的视频文件（MP4, AVI, MOV）
-- 配置处理选项：
-  - **启用人脸识别**：勾选后将识别人脸并显示姓名
-  - **应用马赛克**：勾选后对人脸区域应用马赛克
-- 点击"处理文件"按钮
-- 等待处理完成后，点击"下载结果"获取处理后的视频
+直接运行视频处理脚本：
 
-### 处理逻辑
+```bash
+python src/pre2.py
+```
 
-1. **人脸检测**：YOLOv8模型检测每一帧中的人脸
-2. **人脸识别**（可选）：
-   - 使用InsightFace提取人脸特征
-   - 与gallery底库中的特征进行比对
-   - 返回识别结果和相似度
-3. **智能跟踪**：简化跟踪算法保持人脸ID一致性
-4. **马赛克处理**（可选）：
-   - 仅对未识别的人脸应用马赛克
-   - 或对所有人脸应用马赛克
-   - 可配置扩展比例和马赛克块大小
+**配置参数：**
+```python
+enable_mosaic = False  # 是否启用马赛克（True/False）
+video_path = 'vedio/man.mp4'  # 输入视频路径
+video_save_path = "vedio/man_out.mp4"  # 输出视频路径
+rec_onnx_path = r"C:\Users\用户名\.insightface\models\buffalo_l\w600k_r50.onnx"  # 模型路径
+```
 
-## 技术架构
-
-### 网络结构
-
-#### YOLOv8检测网络
-- **Backbone**：特征提取主干网络（CSPDarknet）
-- **Neck**：特征融合网络（FPN + PAN）
-- **Head**：检测头（分类 + 回归）
-- **DFL**：分布焦点损失模块
-
-#### 模型变体
-支持多种模型规模：
-- `n`: nano - 最小模型，推理最快
-- `s`: small - 小型模型，平衡速度和精度
-- `m`: medium - 中型模型，较高精度
-- `l`: large - 大型模型，高精度
-- `x`: xlarge - 超大模型，最高精度
-
-### 人脸识别流程
-
-1. **关键点检测**：使用5点关键点检测
-2. **人脸对齐**：基于关键点进行人脸对齐到112x112
-3. **特征提取**：使用ResNet50提取512维特征向量
-4. **特征比对**：余弦相似度计算，阈值0.45
-
-## 命令行参数
-
-在 `src/app.py` 中可配置：
+### 3. 单张图片检测
 
 ```python
-# Flask配置
-app.run(debug=True, host='0.0.0.0', port=5000)
+from yolo2 import YOLO
 
-# YOLO配置
+# 初始化检测器
 yolo = YOLO(
     model_path='model/best_epoch_weights.pth',
     classes_path='model/voc_classes.txt',
-    confidence=0.3,  # 检测置信度阈值
-    nms_iou=0.3      # NMS IoU阈值
+    confidence=0.3,
+    nms_iou=0.3
 )
 
-# 人脸识别配置
-sim_th=0.45  # 识别相似度阈值
+# 检测图片
+from PIL import Image
+image = Image.open("test.jpg")
+result = yolo.detect_image(image)  # 返回打码后的图片
+result.save("output.jpg")
 ```
 
-## 性能优化
+### 4. 获取检测框（用于自定义处理）
 
-### GPU加速
-确保CUDA环境正确配置：
-```bash
-# 检查CUDA是否可用
-python -c "import torch; print(torch.cuda.is_available())"
-```
-
-### 模型融合
-使用模型融合加速推理：
 ```python
-yolo.model.fuse()  # 融合Conv和BN层
+from yolo2 import YOLO
+from PIL import Image
+
+yolo = YOLO()
+image = Image.open("test.jpg")
+
+# 获取检测框坐标、置信度和类别
+det_xyxy, det_scores, det_labels = yolo.detect_boxes(image)
+
+# det_xyxy: [[x1, y1, x2, y2], ...]  边界框坐标
+# det_scores: [0.95, 0.87, ...]       置信度
+# det_labels: [0, 0, ...]             类别索引
 ```
 
-### 批量处理
-对于大量文件，建议编写批量处理脚本。
+## 🔧 核心模块说明
 
-## 常见问题
+### YOLO 检测器 (`src/yolo2.py`)
 
-### 1. 模型文件不存在错误
-```
-解决方案：
-- 确保model目录下有best_epoch_weights.pth和voc_classes.txt
-- 运行：python -c "import insightface; insightface.app.download_model('buffalo_l')"
+封装了 YOLO 模型的推理功能，提供多个接口：
+
+- `detect_image(image)` - 检测并打码单张图片
+- `detect_boxes(image)` - 获取检测框信息
+- `get_FPS(image, test_interval)` - 测试推理速度
+
+**主要参数：**
+- `confidence`: 置信度阈值（默认 0.3）
+- `nms_iou`: NMS 阈值（默认 0.3）
+- `input_shape`: 输入图像尺寸（默认 640x640）
+- `mosaic_block`: 马赛克块大小（默认 14）
+- `expand_ratio`: 扩框比例（默认 0.2）
+
+### 人脸识别模块
+
+#### `utils/face_pi.py` - 人脸处理工具类
+
+```python
+from utils.face_pi import FaceKpsAlignRec
+
+# 初始化
+face_id = FaceKpsAlignRec(
+    det_size=(640, 640),
+    rec_onnx_path="path/to/w600k_r50.onnx"
+)
+
+# 提取关键点
+kps5 = face_id.kps5_from_bbox(img_bgr, bbox, margin=0.35)
+
+# 人脸对齐
+aligned = face_id.align_112(img_bgr, kps5)
+
+# 提取特征
+embedding = face_id.embedding_from_aligned(aligned)
 ```
 
-### 2. 内存不足错误
-```
-解决方案：
-- 处理较小的视频文件
-- 降低batch_size（如适用）
-- 使用较小的模型变体（yolov8n）
+#### `utils/face_gallery.py` - 人脸底库管理
+
+```python
+from utils.face_gallery import FaceGallery
+from yolo2 import YOLO
+
+yolo = YOLO()
+gallery = FaceGallery(yolo, rec_onnx_path)
+
+# 构建底库
+gallery.build_gallery(gallery_dir="gallery")
+
+# 识别
+name, sim = gallery.recognize(embedding, sim_th=0.45)
 ```
 
-### 3. GPU不可用
-```
-解决方案：
-- 检查CUDA版本是否与PyTorch兼容
-- 重新安装GPU版本的PyTorch：pip install torch --index-url https://download.pytorch.org/whl/cu118
-- 系统会自动回退到CPU模式，但速度较慢
+### 图像处理模块 (`utils/image_processor.py`)
+
+```python
+from utils.image_processor import ImageProcessor
+import cv2
+
+processor = ImageProcessor()
+img = cv2.imread("test.jpg")
+
+# 应用马赛克
+img = processor.apply_mosaic(
+    img, 
+    left=100, top=100, right=200, bottom=200, 
+    block=14
+)
 ```
 
-### 4. 人脸识别准确率低
-```
-解决方案：
-- 确保gallery中的照片清晰、正面
-- 增加底库中的样本数量
-- 调整相似度阈值（sim_th）
-```
+## 📊 性能优化
 
-## 开发说明
+### GPU 加速
 
-### 训练自定义YOLO模型
+确保安装 CUDA 版本的 PyTorch：
 
 ```bash
-# 准备数据集
-# 按照VOC格式组织数据
-
-# 训练
-python train.py --data_path /path/to/data --epochs 100 --batch_size 16
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 ```
 
-### 扩展功能
+### 推理速度
 
-项目采用模块化设计，易于扩展：
-- 添加新的检测类别：修改 `model/voc_classes.txt`
-- 自定义马赛克效果：修改 `utils/image_processor.py`
-- 实现更复杂的跟踪算法：修改 `src/app.py` 中的跟踪逻辑
+- 使用 `get_FPS()` 方法测试性能
+- 调整 `input_shape` 平衡精度和速度
+- 使用 `letterbox_image=False` 可提升速度（但可能降低精度）
 
-## 依赖项版本兼容性
+### 人脸识别优化
 
-| 包名 | 版本 | 说明 |
-|------|------|------|
-| Python | 3.8+ | 推荐使用3.9或3.10 |
-| PyTorch | 2.0.0+ | 建议使用GPU版本 |
-| CUDA | 11.0+ | 与PyTorch版本匹配 |
-| OpenCV | 4.7.0 | 用于图像/视频处理 |
-| Flask | 2.3.0 | Web框架 |
+- 调整 `rec_interval` 参数控制识别频率
+- 使用特征缓存减少重复计算
+- 调整 `sim_th` 阈值平衡识别准确率和误识别率
 
-## 许可证
+## 🎨 配置说明
 
-本项目遵循MIT许可证。详见LICENSE文件。
+### 马赛克配置
 
-## 贡献指南
+```python
+# 在 YOLO 类中配置
+yolo.mosaic_block = 14      # 马赛克块大小（越大越模糊）
+yolo.expand_ratio = 0.2     # 扩框比例
+yolo.min_face_size = 10     # 最小人脸尺寸
+```
 
-欢迎提交Issue和Pull Request！
+### 识别配置
 
-## 联系方式
+```python
+# 相似度阈值
+sim_th = 0.45  # 越高越严格
 
-- 项目地址：https://github.com/yushui6666/yolo-automic-mosaic
-- Issues：https://github.com/yushui6666/yolo-automic-mosaic/issues
+# 识别稳定性
+unknown_warmup = 5  # 连续多少帧 unknown 才真正当陌生人
+num = 2            # 连续正确识别多少帧才算稳定
+```
 
-## 更新日志
+## 🐛 常见问题
 
-### v1.0.0
-- 初始版本发布
-- 支持YOLOv8人脸检测
-- 集成InsightFace人脸识别
-- 实现马赛克脱敏功能
-- 提供Web界面
+### 1. 模型加载失败
 
-## 致谢
+**问题：** `FileNotFoundError: model/best_epoch_weights.pth not found`
 
-- [YOLOv8](https://github.com/ultralytics/ultralytics) - 目标检测算法
-- [InsightFace](https://github.com/deepinsight/insightface) - 人脸识别算法
-- [Flask](https://flask.palletsprojects.com/) - Web框架
+**解决：**
+- 确保模型文件在正确路径
+- 检查文件名是否正确
+
+### 2. InsightFace 模型未找到
+
+**问题：** `rec_onnx_path cannot be None`
+
+**解决：**
+- 首次运行会自动下载模型到 `~/.insightface/models/`
+- 检查 `w600k_r50.onnx` 是否存在
+- 手动指定正确的模型路径
+
+### 3. 人脸底库为空
+
+**问题：** 人脸识别全部返回 "unknown"
+
+**解决：**
+- 确认 `gallery/` 目录下有照片
+- 检查照片中的人脸能否被检测到
+- 调整 `sim_th` 阈值
+
+### 4. 检测不到人脸
+
+**问题：** 所有检测框置信度都低于阈值
+
+**解决：**
+- 降低 `confidence` 阈值（如改为 0.2）
+- 检查模型是否训练好
+- 确认输入图片清晰度和光照条件
+
+## 📝 更新日志
+
+### v2.0 (当前版本)
+- ✅ 删除训练相关模块（callbacks, dataloader, utils_fit, utils_map）
+- ✅ 优化项目结构，专注于推理应用
+- ✅ 完善 Web 应用功能
+- ✅ 添加视频处理支持
+- ✅ 集成人脸识别和底库管理
+
+## 📄 许可证
+
+本项目采用 MIT 许可证。
+
+## 🙏 致谢
+
+- YOLO: Ultralytics YOLO implementation
+- InsightFace: DeepInsight Face Analysis Toolkit
+- PyTorch: Open source machine learning framework
