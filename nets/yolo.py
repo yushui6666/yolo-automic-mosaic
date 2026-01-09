@@ -10,8 +10,8 @@ import torch
 import torch.nn as nn
 
 from nets.backbone import Backbone, C2f, Conv
-from nets.yolo_training import weights_init
 from utils.utils_bbox import make_anchors
+
 
 def fuse_conv_and_bn(conv, bn):
     """
@@ -261,10 +261,6 @@ class YoloBody(nn.Module):
                 nn.Conv2d(c3, num_classes, 1)
             ) for x in ch
         )
-        
-        # 初始化权重（如果未使用预训练权重）
-        if not pretrained:
-            weights_init(self)
         
         # DFL 模块（用于将分布转换为坐标值）
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
