@@ -57,7 +57,6 @@ class YOLO(object):
         "model_path": 'model/best_epoch_weights.pth',  # 训练好的模型权重文件路径
         "classes_path": 'model/voc_classes.txt',       # 类别名称文件路径（包含所有检测类别）
         "input_shape": [640, 640],                     # 模型输入图像尺寸 [高度, 宽度]
-        "phi": 's',                                   # YOLO 模型变体，'s' 表示 small（小模型，速度快）
         
         # 检测相关配置
         "confidence": 0.3,    # 置信度阈值：只有置信度 >= 0.3 的检测框才会被保留
@@ -158,11 +157,10 @@ class YOLO(object):
         5. 如果启用 CUDA，将模型移到 GPU 并支持多 GPU
         """
         # 步骤 1：创建 YOLO 网络结构
-        # YoloBody: YOLO 的主干网络，根据 input_shape、num_classes、phi 参数构建
         self.net = YoloBody(
             self.input_shape,    # 输入图像尺寸
             self.num_classes,    # 类别数量
-            self.phi            # 模型变体（'s', 'm', 'l', 'x' 等）
+            's'
         )
         
         # 步骤 2：选择计算设备（优先使用 GPU）
