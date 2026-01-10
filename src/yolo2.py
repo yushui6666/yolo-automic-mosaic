@@ -65,7 +65,8 @@ class YOLO(object):
         "cuda": True,         # 是否使用 GPU 加速（需要 CUDA 支持）
         
         # 脱敏相关配置（可按需调整）
-        "mosaic_block": 14,      # 马赛克块大小：值越大，马赛克效果越强（图像越模糊）
+        "mosaic_type": "pixelate",  # 马赛克类型：pixelate(像素化), gaussian(高斯模糊), mean(均值模糊), median(中值模糊), color(颜色填充)
+        "mosaic_block": 14,      # 像素化马赛克块大小：值越大，马赛克效果越强（图像越模糊）
         "expand_ratio": 0.2,    # 扩框比例：检测框向外扩展的比例，防止人脸边缘漏遮
                                  # 例如：原框宽度为 100，扩展后为 100 * (1 + 0.2) = 120
         "min_face_size": 10,     # 最小人脸尺寸：小于此尺寸的检测框会被忽略（可能是误检）
@@ -420,7 +421,8 @@ class YOLO(object):
             image_cv = image_processor.apply_mosaic(
                 image_cv, 
                 left_e, top_e, right_e, bottom_e, 
-                block=self.mosaic_block
+                mosaic_type=self.mosaic_type,
+                block_size=self.mosaic_block
             )
 
         # 步骤 10：将处理后的 OpenCV BGR 图像转换回 PIL RGB 格式

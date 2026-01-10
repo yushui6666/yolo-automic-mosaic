@@ -69,7 +69,8 @@ def initialize_models():
                 model_path=os.path.join(model_dir, 'best_epoch_weights.pth'),
                 classes_path=os.path.join(model_dir, 'voc_classes.txt'),
                 confidence=0.3,
-                nms_iou=0.3
+                nms_iou=0.3,
+                mosaic_type="pixelate"  # 默认马赛克类型
             )
     
     # 初始化人脸识别（抑制输出）
@@ -171,9 +172,10 @@ def upload_video():
         # 获取处理选项
         apply_mosaic = request.form.get('applyMosaic', 'false').lower() == 'true'
         enable_face_detection = request.form.get('faceDetection', 'false').lower() == 'true'
+        mosaic_type = request.form.get('mosaicType', 'pixelate')  # 获取马赛克类型，默认为pixelate
         
         # 处理视频
-        result_path = process_video(file_path, apply_mosaic, enable_face_detection)
+        result_path = process_video(file_path, apply_mosaic, enable_face_detection, mosaic_type)
         
         # 返回处理后的视频
         result_filename = os.path.basename(result_path)
@@ -193,8 +195,14 @@ def download_file(filename):
     return send_from_directory(VIDEO_FOLDER, filename)
 
 
-def process_video(video_path, apply_mosaic, enable_face_detection):
-    """处理视频"""
+def process_video(video_path, apply_mosaic, enable_face_detection, mosaic_type="pixelate"):
+    """处理视频
+    参数:
+        video_path: 视频文件路径
+        apply_mosaic: 是否应用马赛克
+        enable_face_detection: 是否启用人脸识别
+        mosaic_type: 马赛克类型，可选值: pixelate, gaussian, mean, median, color
+    """
     # 初始化视频写入器
     video_capture = cv2.VideoCapture(video_path)
     frame_width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -294,7 +302,11 @@ def process_video(video_path, apply_mosaic, enable_face_detection):
                     ey2 = min(frame_height, cy + nh // 2)
                     
                     image_processor = ImageProcessor()
-                    frame = image_processor.apply_mosaic(frame, ex1, ey1, ex2, ey2, block=yolo.mosaic_block)
+                    frame = image_processor.apply_mosaic(
+                        frame, ex1, ey1, ex2, ey2, 
+                        mosaic_type=mosaic_type,
+                        block_size=yolo.mosaic_block
+                    )
             
             # 在框上方绘制 ID 和识别结果
             cv2.putText(frame, f"ID {track_id.split('_')[1]}: {name_text}", 
