@@ -10,10 +10,21 @@
 #   7. 模型权重下载
 #-----------------------------------------------------------------------#
 import random
+import logging
 
 import numpy as np
 import torch
 from PIL import Image
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 #---------------------------------------------------------#
@@ -222,13 +233,13 @@ def show_config(**kwargs):
         |            input_shape |                              [640, 640]|
         ...
     """
-    print('Configurations:')
-    print('-' * 70)
-    print('|%25s | %40s|' % ('keys', 'values'))
-    print('-' * 70)
+    logger.info('Configurations:')
+    logger.info('-' * 70)
+    logger.info('|%25s | %40s|' % ('keys', 'values'))
+    logger.info('-' * 70)
     for key, value in kwargs.items():
-        print('|%25s | %40s|' % (str(key), str(value)))
-    print('-' * 70)
+        logger.info('|%25s | %40s|' % (str(key), str(value)))
+    logger.info('-' * 70)
         
 def download_weights(phi, model_dir="./model_data"):
     """
@@ -260,4 +271,3 @@ def download_weights(phi, model_dir="./model_data"):
     # 创建保存目录
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
-    

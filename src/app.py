@@ -18,6 +18,17 @@ logging.getLogger('insightface').setLevel(logging.WARNING)
 import warnings
 warnings.filterwarnings('ignore', category=UserWarning)
 
+# 配置日志
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # 导入您的Python模块
 # 添加当前目录到Python路径，以便导入nets模块
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -65,11 +76,15 @@ def initialize_models():
     
     with open(os.devnull, 'w') as devnull:
         with redirect_stdout(devnull), redirect_stderr(devnull):
+            # 从环境变量获取检测阈值参数
+            detection_confidence = float(os.getenv("DETECTION_CONFIDENCE", "0.3"))
+            nms_iou_threshold = float(os.getenv("NMS_IOU_THRESHOLD", "0.3"))
+            
             yolo = YOLO(
                 model_path=os.path.join(model_dir, 'best_epoch_weights.pth'),
                 classes_path=os.path.join(model_dir, 'voc_classes.txt'),
-                confidence=0.3,
-                nms_iou=0.3,
+                confidence=detection_confidence,
+                nms_iou=nms_iou_threshold,
                 mosaic_type="pixelate"  # 默认马赛克类型
             )
     
@@ -83,7 +98,7 @@ def initialize_models():
             face_gallery = FaceGallery(yolo, rec_onnx_path)
             gallery = face_gallery.build_gallery(gallery_dir=GALLERY_FOLDER)
     
-    print("模型初始化完成")
+    logger.info("模型初始化完成")
 
 @app.route('/')
 def index():
@@ -120,17 +135,17 @@ def upload_photo():
             # 移除自定义名称中的扩展名（如果用户输入了）
             name_without_ext = custom_name.rsplit('.', 1)[0] if '.' in custom_name else custom_name
             final_filename = secure_filename(name_without_ext) + '.' + file_ext
-            print(f"使用自定义名称: {custom_name} -> {final_filename}")
+            logger.info(f"使用自定义名称: {custom_name} -> {final_filename}")
         else:
             # 使用原始文件名
             final_filename = secure_filename(original_filename)
-            print(f"使用原始文件名: {final_filename}")
+            logger.info(f"使用原始文件名: {final_filename}")
         
         # 保存到 gallery 文件夹
         file_path = os.path.join(GALLERY_FOLDER, final_filename)
         file.save(file_path)
         
-        print(f"照片已保存到: {file_path}")
+        logger.info(f"照片已保存到: {file_path}")
         
         return jsonify({
             'success': True,
@@ -139,7 +154,7 @@ def upload_photo():
         })
         
     except Exception as e:
-        print(f"上传照片时出错: {str(e)}")
+        logger.error(f"上传照片时出错: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'上传照片时出错: {str(e)}'}), 500
@@ -237,7 +252,8 @@ def process_video(video_path, apply_mosaic, enable_face_detection, mosaic_type="
         det_xyxy, det_scores, det_labels = yolo.detect_boxes(pil_img)
         
         # 过滤低置信度框
-        keep = det_scores >= 0.4
+        confidence_threshold = yolo.confidence
+        keep = det_scores >= confidence_threshold
         det_xyxy = det_xyxy[keep]
     
         # 为每个检测到的人脸进行处理

@@ -97,7 +97,7 @@ python src/pre2.py
 enable_mosaic = False  # 是否启用马赛克（True/False）
 video_path = 'vedio/man.mp4'  # 输入视频路径
 video_save_path = "vedio/man_out.mp4"  # 输出视频路径
-rec_onnx_path = r"C:\Users\用户名\.insightface\models\buffalo_l\w600k_r50.onnx"  # 模型路径
+rec_onnx_path = r"~/.insightface/models/buffalo_l/w600k_r50.onnx"  # 模型路径
 ```
 
 ### 3. 单张图片检测

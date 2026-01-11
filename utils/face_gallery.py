@@ -10,9 +10,20 @@ import cv2
 import numpy as np
 from PIL import Image
 from collections import defaultdict
+import logging
 
 from utils.face_pi import FaceKpsAlignRec  # 人脸关键点定位、对齐、特征提取
 from src.yolo2 import YOLO                   # YOLO 检测
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 class FaceGallery:
@@ -67,7 +78,7 @@ class FaceGallery:
         tmp = defaultdict(list)
         
         if not os.path.isdir(gallery_dir):
-            print(f"[warn] gallery 目录不存在: {gallery_dir}")
+            logger.warning(f"gallery 目录不存在: {gallery_dir}")
             return {}
         
         for fn in os.listdir(gallery_dir):
@@ -81,7 +92,7 @@ class FaceGallery:
             
             img_bgr = cv2.imread(path)
             if img_bgr is None:
-                print(f"[warn] 无法读取图片: {path}")
+                logger.warning(f"无法读取图片: {path}")
                 continue
             
             # 1) YOLO 检测这张底库图片中的人脸，确保提取的是人脸区域
@@ -90,7 +101,7 @@ class FaceGallery:
             det_xyxy, det_scores, det_labels = self.yolo.detect_boxes(pil_img)
             
             if det_xyxy is None or len(det_xyxy) == 0:
-                print(f"[warn] {path} 未检测到人脸（YOLO），跳过")
+                logger.warning(f"{path} 未检测到人脸（YOLO），跳过")
                 continue
             
             # 取置信度最高的一个人脸
@@ -100,20 +111,20 @@ class FaceGallery:
             # 2) 计算人脸关键点
             kps5 = self.face_id.kps5_from_bbox(img_bgr, bbox, margin=0.35)
             if kps5 is None:
-                print(f"[warn] {path} 未得到关键点")
+                logger.warning(f"{path} 未得到关键点")
                 continue
             
             # 3) 矫正对齐
             aligned = self.face_id.align_112(img_bgr, kps5)
             if aligned is None:
-                print(f"[warn] {path} 对齐失败")
+                logger.warning(f"{path} 对齐失败")
                 continue
             
             # 4) 提取特征向量
             emb = self.face_id.embedding_from_aligned(aligned)
             emb = np.asarray(emb, dtype=np.float32).reshape(-1)
             tmp[id_name].append(emb)
-            print(f"[gallery] 加载 {id_name}, emb shape={emb.shape}, from {fn}")
+            logger.info(f"[gallery] 加载 {id_name}, emb shape={emb.shape}, from {fn}")
         
         # 5) 对同一个人多张图片的 embedding 求平均
         self.gallery = {}
@@ -121,7 +132,7 @@ class FaceGallery:
             embs = np.stack(embs, axis=0)  # [N, 512]
             mean_emb = embs.mean(axis=0)   # [512]
             self.gallery[id_name] = mean_emb
-            print(f"[gallery] {id_name} 最终使用 {len(embs)} 张图片, mean_emb shape={mean_emb.shape}")
+            logger.info(f"[gallery] {id_name} 最终使用 {len(embs)} 张图片, mean_emb shape={mean_emb.shape}")
         
         return self.gallery
     

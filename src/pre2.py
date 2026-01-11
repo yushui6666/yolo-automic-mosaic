@@ -10,10 +10,22 @@
 import os
 import time
 import argparse
+import logging
 
 # 设置 ONNX Runtime 的日志级别，减少不必要的控制台输出
 os.environ["ORT_LOG_SEVERITY_LEVEL"] = "3"  # 0-4: VERBOSE, INFO, WARNING, ERROR, FATAL
 os.environ["ORT_LOG_VERBOSITY_LEVEL"] = "0"  # 0 最安静
+
+# 识别优化参数 - 从环境变量获取
+rec_interval = int(os.getenv("RECOGNITION_INTERVAL", "1"))           # 优化参数：每隔几帧做一次特征提取？1表示每帧都做，设大可提速
+num = int(os.getenv("RECOGNITION_NUM", "3"))                        # 连续正确识别超过 num 帧后，短暂失败也不变 unknown
+unknown_warmup = int(os.getenv("UNKNOWN_WARMUP", "8"))              # 同一 ID 连续 unknown 达到这个帧数才真正当陌生人
+min_track_length = int(os.getenv("MIN_TRACK_LENGTH", "5"))        # 目标至少被跟踪多少帧后才开始考虑打码，减少新目标的抖动
+
+# 跟踪器参数 - 从环境变量获取
+iou_th = float(os.getenv("TRACKER_IOU_THRESHOLD", "0.15"))          # 跟踪匹配的IoU阈值，两个框IoU大于此值才认为是同一目标
+max_miss = int(os.getenv("TRACKER_MAX_MISS", "2"))                 # 最大容忍丢失帧数，超过此值则删除轨迹
+ema_alpha = float(os.getenv("TRACKER_EMA_ALPHA", "0.6"))            # EMA平滑系数，用于平滑跟踪框的抖动
 
 import cv2
 import numpy as np
@@ -24,6 +36,16 @@ from collections import defaultdict
 from yolo2 import YOLO                   # 负责 YOLO 检测
 from utils.image_processor import ImageProcessor # 图像处理类，包含马赛克等功能
 from utils.face_gallery import FaceGallery    # 人脸库管理类
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 def iou_xyxy(a, b):
@@ -160,7 +182,7 @@ def build_gallery(face_id, yolo, gallery_dir="gallery"):
     tmp = defaultdict(list)
 
     if not os.path.isdir(gallery_dir):
-        print(f"[warn] gallery 目录不存在: {gallery_dir}")
+        logger.warning(f"gallery 目录不存在: {gallery_dir}")
         return {}
 
     for fn in os.listdir(gallery_dir):
@@ -174,7 +196,7 @@ def build_gallery(face_id, yolo, gallery_dir="gallery"):
 
         img_bgr = cv2.imread(path)
         if img_bgr is None:
-            print(f"[warn] 无法读取图片: {path}")
+            logger.warning(f"无法读取图片: {path}")
             continue
 
         # 1) YOLO 检测这张底库图片中的人脸，确保提取的是人脸区域
@@ -183,7 +205,7 @@ def build_gallery(face_id, yolo, gallery_dir="gallery"):
         det_xyxy, det_scores, det_labels = yolo.detect_boxes(pil_img)
 
         if det_xyxy is None or len(det_xyxy) == 0:
-            print(f"[warn] {path} 未检测到人脸（YOLO），跳过")
+            logger.warning(f"{path} 未检测到人脸（YOLO），跳过")
             continue
 
         # 取置信度最高的一个人脸
@@ -193,20 +215,20 @@ def build_gallery(face_id, yolo, gallery_dir="gallery"):
         # 2) 计算人脸关键点 (margin 0.35 表示扩充一点框，有助于关键点定位准确)
         kps5 = face_id.kps5_from_bbox(img_bgr, bbox, margin=0.35)
         if kps5 is None:
-            print(f"[warn] {path} 未得到关键点")
+            logger.warning(f"{path} 未得到关键点")
             continue
 
         # 3) 矫正对齐 (Affine Transform) 到 112x112 标准尺寸
         aligned = face_id.align_112(img_bgr, kps5)
         if aligned is None:
-            print(f"[warn] {path} 对齐失败")
+            logger.warning(f"{path} 对齐失败")
             continue
 
         # 4) 提取特征向量 (通常是 512 维)
         emb = face_id.embedding_from_aligned(aligned)
         emb = np.asarray(emb, dtype=np.float32).reshape(-1)
         tmp[id_name].append(emb)
-        print(f"[gallery] 加载 {id_name}, emb shape={emb.shape}, from {fn}")
+        logger.info(f"[gallery] 加载 {id_name}, emb shape={emb.shape}, from {fn}")
 
     # 5) 对同一个人多张图片的 embedding 求平均，增强底库鲁棒性
     gallery = {}
@@ -214,7 +236,7 @@ def build_gallery(face_id, yolo, gallery_dir="gallery"):
         embs = np.stack(embs, axis=0)  # [N, 512]
         mean_emb = embs.mean(axis=0)   # [512]
         gallery[id_name] = mean_emb
-        print(f"[gallery] {id_name} 最终使用 {len(embs)} 张图片, mean_emb shape={mean_emb.shape}")
+        logger.info(f"[gallery] {id_name} 最终使用 {len(embs)} 张图片, mean_emb shape={mean_emb.shape}")
 
     return gallery
 
@@ -226,12 +248,6 @@ if __name__ == "__main__":
     # 默认值为 False，表示不进行马赛克处理
     # 如果您想开启马赛克效果，请将其设置为 True
     enable_mosaic = False  # <--- 在这里修改 True 或 False 来开启/关闭马赛克
-
-    # 如果您想从命令行行控制，可以取消下面代码的注释
-    # parser = argparse.ArgumentParser(description="Video face detection and mosaic application.")
-    # parser.add_argument("--enable-mosaic", action="store_true", help="Enable mosaic for unknown faces.")
-    # args = parser.parse_args()
-    # enable_mosaic = args.enable_mosaic
 
     # 初始化 YOLO 检测器
     yolo = YOLO()
@@ -260,26 +276,39 @@ if __name__ == "__main__":
             raise ValueError("未能正确读取视频，请检查视频路径。")
 
         # 初始化跟踪器
-        tracker = SimpleTracker(iou_th=0.3, max_miss=2, ema_alpha=0.6)
+        # 使用 YOLO 对象中的 nms_iou 作为跟踪器的 iou_th
+        # 使用环境变量配置跟踪器参数
+        tracker = SimpleTracker(
+            iou_th=float(os.getenv("TRACKER_IOU_THRESHOLD", "0.15")),  # 跟踪匹配的IoU阈值
+            max_miss=int(os.getenv("TRACKER_MAX_MISS", "2")),          # 最大容忍丢失帧数
+            ema_alpha=float(os.getenv("TRACKER_EMA_ALPHA", "0.6"))    # EMA平滑系数
+        )
 
         # 初始化人脸底库模块
         # rec_onnx_path 是 ArcFace 模型的路径，需要确保模型文件存在
         # 注意：这里的路径是绝对路径，换电脑运行需要修改！
-        rec_onnx_path = r"C:\Users\34239\.insightface\models\buffalo_l\w600k_r50.onnx"
+        rec_onnx_path = r"~/.insightface/models/buffalo_l/w600k_r50.onnx"
         face_gallery = FaceGallery(yolo, rec_onnx_path)
         # 构建底库：读取 ./gallery 文件夹
         gallery = face_gallery.build_gallery(gallery_dir="gallery")
 
         fps = 0.0
         frame_idx = 0
-        rec_interval = 1           # 优化参数：每隔几帧做一次特征提取？1表示每帧都做，设大可提速
+        
+        # 识别优化参数 - 从环境变量获取
+        rec_interval = int(os.getenv("RECOGNITION_INTERVAL", "1"))           # 优化参数：每隔几帧做一次特征提取？1表示每帧都做，设大可提速
+        num = int(os.getenv("RECOGNITION_NUM", "3"))                        # 连续正确识别超过 num 帧后，短暂失败也不变 unknown
+        unknown_warmup = int(os.getenv("UNKNOWN_WARMUP", "8"))              # 同一 ID 连续 unknown 达到这个帧数才真正当陌生人
+        min_track_length = int(os.getenv("MIN_TRACK_LENGTH", "5"))        # 目标至少被跟踪多少帧后才开始考虑打码，减少新目标的抖动
+        
         track_embs = {}            # 缓存字典：track_id -> 特征向量
         track_names = {}           # 缓存字典：track_id -> 显示的名字(含相似度)
-        num = 2                    # 新增：同一ID连续正确识别超过 num 帧后，短暂失败也不变 unknown
-        track_stable_cnt = {}      # 新增：track_id -> 连续正确识别帧数
-        unknown_warmup = 5         # 新增：同一 ID 连续 unknown 达到这个帧数才真正当陌生人
-        track_unknown_cnt = {}     # 新增：track_id -> 连续 unknown 帧数
-        print("开始视频处理循环...")
+        track_stable_cnt = {}      # track_id -> 连续正确识别帧数
+        track_unknown_cnt = {}     # track_id -> 连续 unknown 帧数
+        track_total_frames = {}    # track_id -> 总共被跟踪的帧数
+        prev_names = {}            # track_id -> 上一帧的身份
+        name_change_buffer = {}    # track_id -> 身份切换缓冲计数器
+        logger.info("开始视频处理循环...")
         while True:
             t1 = time.time()
 
@@ -297,13 +326,19 @@ if __name__ == "__main__":
             # --- 1) YOLO 检测人脸框 ---
             det_xyxy, det_scores, det_labels = yolo.detect_boxes(pil_img)
 
-            # --- 2) 过滤低置信度框 (score < 0.4) ---
-            keep = det_scores >= 0.4
+            # --- 2) 过滤低置信度框 (score < confidence_threshold) ---
+            confidence_threshold = yolo.confidence
+            keep = det_scores >= confidence_threshold
             det_xyxy = det_xyxy[keep]
 
             # --- 3) 跟踪模块：获取当前帧稳定的 Track ---
             tracks = tracker.update(det_xyxy)
 
+            # 更新跟踪帧数计数器
+            for tid, bb in tracks:
+                # 更新每个track的总帧数
+                track_total_frames[tid] = track_total_frames.get(tid, 0) + 1
+                
             # 遍历每一个跟踪到的人脸
             for tid, bb in tracks:
                 x1, y1, x2, y2 = bb
@@ -355,15 +390,25 @@ if __name__ == "__main__":
                     if cur_id is not None:
                         # 本帧识别到了已知人
                         if cur_id == prev_id:
+                            # 相同身份，增加稳定计数
                             stable_cnt += 1
+                            name_change_buffer[tid] = 0  # 重置身份切换缓冲计数器
                         else:
-                            stable_cnt = 1  # 换了一个新的人
+                            # 检测到身份变化，但需要更谨慎的判断
+                            if stable_cnt >= num and name_change_buffer.get(tid, 0) < 2:
+                                # 稳定识别过且切换缓冲计数未超限，保持原有身份
+                                name_text = prev_text
+                                name_change_buffer[tid] = name_change_buffer.get(tid, 0) + 1
+                            else:
+                                # 新身份或切换缓冲已超限，接受新身份
+                                stable_cnt = 1
+                                name_text = candidate_text
+                                name_change_buffer[tid] = 0
                         track_stable_cnt[tid] = stable_cnt
-
-                        unknown_cnt = 0   # 既然是已知人，就把 unknown 计数清零
+                        
+                        # 重置unknown计数
+                        unknown_cnt = 0
                         track_unknown_cnt[tid] = unknown_cnt
-
-                        name_text = candidate_text
                     else:
                         # 本帧结果是 unknown
                         if stable_cnt >= num and prev_id is not None:
@@ -401,8 +446,10 @@ if __name__ == "__main__":
 
                 # --- 5) 隐私打码逻辑 ---
                 # 只有当识别结果是 unknown 且连续 unknown 帧数 >= unknown_warmup 且全局变量 enable_mosaic 为 True 时才打码
+                # 同时要求目标已被跟踪足够多的帧数，避免新目标的误判
                 unk_cnt = track_unknown_cnt.get(tid, 0)
-                if enable_mosaic and name_text.startswith("unknown") and unk_cnt >= unknown_warmup:
+                total_frames = track_total_frames.get(tid, 0)
+                if enable_mosaic and name_text.startswith("unknown") and unk_cnt >= unknown_warmup and total_frames >= min_track_length:
                     expand_ratio = 0.18
                     cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
                     nw, nh = int(bw * (1 + expand_ratio)), int(bh * (1 + expand_ratio))
@@ -446,10 +493,10 @@ if __name__ == "__main__":
             if c == 27:
                 break
 
-        print("Video Detection Done!")
+        logger.info("Video Detection Done!")
         capture.release()
         if video_save_path != "":
-            print("Save processed video to the path :" + video_save_path)
+            logger.info(f"Save processed video to the path :{video_save_path}")
             out.release()
         cv2.destroyAllWindows()
 

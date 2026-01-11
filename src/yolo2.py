@@ -21,6 +21,7 @@ import torch
 import torch.nn as nn
 # PIL：Python 图像处理库
 from PIL import Image, ImageFont
+import logging
 
 # 导入自定义模块
 import sys
@@ -33,6 +34,16 @@ from utils.utils import (cvtColor, get_classes, preprocess_input,
                          resize_image, show_config)  # 图像预处理工具函数
 from utils.utils_bbox import DecodeBox  # 边界框解码和非极大值抑制工具
 from utils.image_processor import ImageProcessor  # 图像处理类，包含马赛克等功能
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 class YOLO(object):
@@ -57,10 +68,11 @@ class YOLO(object):
         "model_path": 'model/best_epoch_weights.pth',  # 训练好的模型权重文件路径
         "classes_path": 'model/voc_classes.txt',       # 类别名称文件路径（包含所有检测类别）
         "input_shape": [640, 640],                     # 模型输入图像尺寸 [高度, 宽度]
+        "phi": 's',                                     # 模型变体：n(nano), s(small), m(medium), l(large), x(xlarge)
         
         # 检测相关配置
-        "confidence": 0.3,    # 置信度阈值：只有置信度 >= 0.3 的检测框才会被保留
-        "nms_iou": 0.3,       # NMS（非极大值抑制）的 IoU 阈值：用于去除重叠的检测框
+        "confidence": float(os.getenv("DETECTION_CONFIDENCE", "0.3")),    # 置信度阈值：只有置信度 >= 0.3 的检测框才会被保留
+        "nms_iou": float(os.getenv("NMS_IOU_THRESHOLD", "0.3")),           # NMS（非极大值抑制）的 IoU 阈值：用于去除重叠的检测框
         "letterbox_image": True,  # 是否使用 letterbox 方式缩放图像（保持宽高比，避免变形）
         "cuda": True,         # 是否使用 GPU 加速（需要 CUDA 支持）
         
@@ -161,7 +173,7 @@ class YOLO(object):
         self.net = YoloBody(
             self.input_shape,    # 输入图像尺寸
             self.num_classes,    # 类别数量
-            's'
+            self.phi             # 模型变体（从配置参数中获取）
         )
         
         # 步骤 2：选择计算设备（优先使用 GPU）
@@ -176,7 +188,7 @@ class YOLO(object):
         # eval(): 设置为评估模式，关闭 dropout 和 batch normalization 的训练行为
         self.net = self.net.fuse().eval()
         
-        print('{} model, and classes loaded.'.format(self.model_path))
+        logger.info('{} model, and classes loaded.'.format(self.model_path))
 
         # 步骤 5：如果启用 CUDA 且不是 ONNX 模式，将模型移到 GPU
         if not onnx and self.cuda:
@@ -349,9 +361,9 @@ class YOLO(object):
             for i in range(self.num_classes):
                 num = np.sum(top_label == i)  # 统计类别 i 的检测数量
                 if num > 0:
-                    print(self.class_names[i], " : ", num)
+                    logger.info(f"{self.class_names[i]} : {num}")
                 classes_nums[i] = num
-            print("classes_nums:", classes_nums)
+            logger.info(f"classes_nums: {classes_nums}")
 
         # 步骤 5：如果启用裁剪功能，保存每个检测到的人脸区域
         if crop:
