@@ -190,12 +190,17 @@ class YOLO(object):
         
         logger.info('{} model, and classes loaded.'.format(self.model_path))
 
-        # 步骤 5：如果启用 CUDA 且不是 ONNX 模式，将模型移到 GPU
-        if not onnx and self.cuda:
-            # DataParallel: 多 GPU 并行推理（如果有多块 GPU）
+        # ===== 设备选择（统一）=====
+        self.device = torch.device("cuda" if self.cuda and torch.cuda.is_available() else "cpu")
+
+        if self.device.type == "cuda":
             self.net = nn.DataParallel(self.net)
-            # 将模型移到 GPU（默认使用第一块 GPU，索引 0）
-            self.net = self.net.cuda()
+            self.net = self.net.to(self.device)
+            logger.info("YOLO running on CUDA")
+        else:
+            self.net = self.net.to(self.device)
+            logger.info("YOLO running on CPU")
+
 
     def _infer(self, image):
         """
@@ -249,8 +254,8 @@ class YOLO(object):
             images = torch.from_numpy(image_data)
             
             # 如果启用 CUDA，将张量移到 GPU
-            if self.cuda:
-                images = images.cuda()
+            images = images.to(self.device)
+
 
             # 前向传播：模型推理
             outputs = self.net(images)
@@ -483,8 +488,7 @@ class YOLO(object):
         # 预热可以触发 GPU 初始化、CUDA 内核编译等，使后续推理更稳定
         with torch.no_grad():
             images = torch.from_numpy(image_data)
-            if self.cuda:
-                images = images.cuda()
+            images = images.to(self.device)
             outputs = self.net(images)
             outputs = self.bbox_util.decode_box(outputs)
             _ = self.bbox_util.non_max_suppression(

@@ -147,11 +147,28 @@ def upload_photo():
         
         logger.info(f"照片已保存到: {file_path}")
         
-        return jsonify({
-            'success': True,
-            'message': f'照片已保存到人脸库: {final_filename}',
-            'filename': final_filename
-        })
+        # 重载人脸库
+        global gallery
+        try:
+            logger.info("开始重载人脸库...")
+            gallery = face_gallery.build_gallery(gallery_dir=GALLERY_FOLDER)
+            gallery_size = len(gallery) if gallery else 0
+            logger.info(f"人脸库重载完成，当前共 {gallery_size} 个人脸特征")
+            
+            return jsonify({
+                'success': True,
+                'message': f'照片已保存到人脸库: {final_filename}，人脸库已更新（共{gallery_size}人）',
+                'filename': final_filename,
+                'gallery_size': gallery_size
+            })
+        except Exception as e:
+            logger.error(f"重载人脸库时出错: {str(e)}")
+            # 即使重载失败，照片已保存成功，仍返回成功响应
+            return jsonify({
+                'success': True,
+                'message': f'照片已保存到人脸库: {final_filename}（但人脸库重载失败，请检查日志）',
+                'filename': final_filename
+            })
         
     except Exception as e:
         logger.error(f"上传照片时出错: {str(e)}")
@@ -343,4 +360,4 @@ if __name__ == '__main__':
     initialize_models()
     
     # 启动Flask应用
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=6014)
